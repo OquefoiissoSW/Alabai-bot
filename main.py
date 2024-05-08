@@ -48,8 +48,9 @@ def is_exists(message):
 
 def find_subject(message):
     subject = message.text.strip()
+    global last_subject
     last_subject = subject
-    # Поиск студентов по дисциплине
+
     cursor.execute('''
             SELECT surname, attendance, marks
             FROM attendance
@@ -60,25 +61,24 @@ def find_subject(message):
     if results:
         bot.reply_to(message, 'Введите фамилию')
         bot.register_next_step_handler(message, print_stat)
-
-        # for result in results:
-        #     surname, attendance, marks = result
-        #     response = f"Студент: {surname}\nПосещаемость: {attendance}\nБаллы: {marks}\n\n"
-        #     bot.reply_to(message, response)
     else:
         bot.reply_to(message, "По вашему запросу ничего не найдено.")
 
 def print_stat(message):
+    surname = message.text.strip()
+    print(last_subject)
+    print(surname)
     cursor.execute('''
         SELECT attendance, marks
         FROM attendance
         WHERE surname = ? AND subject = ? 
-    ''', (message.text.strip(), last_subject))
+    ''', (str(surname), str(last_subject)))
 
     result = cursor.fetchone()
+    print(result)
 
-    attendance, mark = result
-    response = f"Успеваемость студента {message} по дисциплине {last_subject}:\nПосещаемость = {attendance}\nБаллы = {mark}"
+    attendance, marks = result
+    response = f"Успеваемость студента {surname} по дисциплине {last_subject}:\nПосещаемость = {attendance}\nБаллы = {marks}"
     bot.reply_to(message, response)
 
 bot.polling()
