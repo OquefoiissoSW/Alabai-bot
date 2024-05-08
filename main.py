@@ -1,16 +1,31 @@
 import sqlite3
 import telebot
+import database
 from telebot import types
 
 API_TOKEN = '6939818087:AAE_Xii_G2uncUOQ9_DuqQsuUjFnIlTmClU'
 bot = telebot.TeleBot(API_TOKEN)
+
 conn = sqlite3.connect("Students.db", check_same_thread=False)
 cursor = conn.cursor()
 
+create_table_query = '''
+    CREATE TABLE IF NOT EXISTS attendance (
+    id INTEGER PRIMARY KEY,
+    surname VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    attendance INTEGER,
+    marks INTEGER
+    )
+    '''
+
+cursor.execute(create_table_query)
+cursor.execute("INSERT INTO attendance (surname, subject, attendance, marks) VALUES (?, ?, ?, ?)",
+               ('Литвинов', 'Математика', 60, 45))
+last_subject = ''
+
 @bot.message_handler(commands=['start'])
 def handle_start(message):
-    fill_table()
-
     bot.send_message(message.chat.id, "Привет, я ваш телеграм-бот!")
 
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -21,31 +36,49 @@ def handle_start(message):
 
 @bot.message_handler(func=lambda message: message.text == "Узнать мою успеваемость")
 def handle_key(message):
-    msg = bot.send_message(message.chat.id, "Введите фамилию")
-    bot.register_next_step_handler(msg, print_stat)
+    msg = bot.send_message(message.chat.id, "Введите название дисциплины")
+    bot.register_next_step_handler(msg, find_subject)
+
+def is_exists(message):
+    cursor.execute("SELECT * FROM attendance WHERE subject=?", (message.text,))
+    if cursor.fetchone() is None:
+        return False
+    else:
+        return True
+
+def find_subject(message):
+    subject = message.text.strip()
+    last_subject = subject
+    # Поиск студентов по дисциплине
+    cursor.execute('''
+            SELECT surname, attendance, marks
+            FROM attendance
+            WHERE subject = ?
+        ''', (subject,))
+    results = cursor.fetchall()
+
+    if results:
+        bot.reply_to(message, 'Введите фамилию')
+        bot.register_next_step_handler(message, print_stat)
+
+        # for result in results:
+        #     surname, attendance, marks = result
+        #     response = f"Студент: {surname}\nПосещаемость: {attendance}\nБаллы: {marks}\n\n"
+        #     bot.reply_to(message, response)
+    else:
+        bot.reply_to(message, "По вашему запросу ничего не найдено.")
 
 def print_stat(message):
-    #bot.send_message(message.chat.id, message.text)
-    cursor.execute("SELECT * FROM Students WHERE Surname=?", (message.text,))
-    student_data = cursor.fetchone()
+    cursor.execute('''
+        SELECT attendance, marks
+        FROM attendance
+        WHERE surname = ? AND subject = ? 
+    ''', (message.text.strip(), last_subject))
 
-    if student_data:
-        bot.send_message(message.chat.id, str(student_data[1]))
-        bot.send_message(message.chat.id, str(student_data[2]))
-    else:
-        bot.send_message(message.chat.id, "Студент с такой фамилией не найден")
-    #cursor.execute("SELECT * FROM Users WHERE Name=?", (name_to_find,))
+    result = cursor.fetchone()
 
-def fill_table():
-    create_table_query = """
-        CREATE TABLE IF NOT EXISTS Students (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        surname VARCHAR(255) NOT NULL,
-        group_name VARCHAR(255) NOT NULL
-        )
-        """
-    cursor.execute(create_table_query)
-    cursor.execute("INSERT INTO Students (surname, group_name) VALUES (?, ?)", ('Литвинов', 'ИВТ-232'))
-    cursor.execute("INSERT INTO Students (surname, group_name) VALUES (?, ?)", ('Пропердолина', 'ИВТ-231'))
+    attendance, mark = result
+    response = f"Успеваемость студента {message} по дисциплине {last_subject}:\nПосещаемость = {attendance}\nБаллы = {mark}"
+    bot.reply_to(message, response)
 
 bot.polling()
